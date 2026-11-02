@@ -1,3 +1,5 @@
+import re
+
 from src.data_utils.document import Document
 from src.retrievers.base_retriever import Retriever
 import numpy as np
@@ -16,22 +18,24 @@ class TFIDF(Retriever):
 
     def PreprocessText(self, text: str) -> list[str]:
         """
-        Remove unwanted charatcters from text and lowercase
+        Remove unwanted characters from text and lowercase
         """
-        raise NotImplementedError()
-        
+        text = text.lower() # lowercase
+        text = re.sub(r'[^a-z0-9\s]', ' ', text) # this can be modified
+        return text.split()
+
     def GetQueryVocabulary(self, query: str) -> list[str]:
         """
         Returns all unique words in a query
         """
-        raise NotImplementedError()
+        return set(self.PreprocessText(query))
 
     def GetDocumentVocabulary(self, document: Document) -> list[str]:
         """
         Returns all unique words in a document
         """
-        raise NotImplementedError()
-    
+        return set(self.PreprocessText(document.GetText()))
+
     def GetCorpusVocabulary(self) -> set[str]:
         """
         Returns all unique words in ALL documents.
@@ -45,21 +49,29 @@ class TFIDF(Retriever):
         """
         Returns a dict with terms and counts of how many documents the term occurs in (counted once per document).
         """
-        raise NotImplementedError()
-       
-    
+        dict_doc_freq = dict.fromkeys(self.GetCorpusVocabulary(), 0)
+        for document in self.index.GetDocuments():
+            unique_terms = self.GetDocumentVocabulary(document)
+            for term in unique_terms:
+                dict_doc_freq[term] += 1
+        return dict_doc_freq
+
     def GetInverseDocumentFrequencies(self) -> dict[str, float]:
         """
         Returns a dict with terms and their corresponding inverse document frequencies.
         """
-        raise NotImplementedError()
-    
+        doc_counts = len(self.index.GetDocuments())
+        dict_idf = {key: np.log(doc_counts / value) for key, value in self.GetDocumentFrequencies().items()}
+        return dict_idf
     
     def GetDocumentTermCounts(self, document: Document):
         """
         Returns a dict on the form {term: num_occurences} for an input Document.
         """
-        raise NotImplementedError()
+        dict_term_counts = dict.fromkeys(self.GetDocumentVocabulary(document), 0)
+        for term in self.PreprocessText(document.GetText()):
+            dict_term_counts[term] += 1
+        return dict_term_counts
 
     def GetDocumentsTFIDFVectors(self):
         """
@@ -73,7 +85,15 @@ class TFIDF(Retriever):
         n_terms = len(self.corpus_vocabulary)
         tfidf_matrix = lil_matrix((n_documents, n_terms), dtype=np.float32)
 
-        # TODO: Add tf-idf code
+        for doc_idx, document in enumerate(self.index.GetDocuments()):
+            term_counts = self.GetDocumentTermCounts(document)
+            if not term_counts:
+                continue  # There were some errors due to empty documents in Fiqa
+            max_freq = max(term_counts.values())  # Get the maximum based on the project description
+            for term, count in term_counts.items():
+                term_idx = self.term_to_index[term]
+                tf_score = count / max_freq
+                tfidf_matrix[doc_idx, term_idx] = tf_score * self.idf[term]
         
         return tfidf_matrix.tocsr()   # Convert to CSR format for efficient row slicing
     
@@ -88,7 +108,13 @@ class TFIDF(Retriever):
         """
         query_vector = lil_matrix((len(queries), len(self.corpus_vocabulary)), dtype=np.float32)
 
-        # TODO: add code
+        for idx, query in enumerate(queries):
+            term_counts = dict.fromkeys(self.GetQueryVocabulary(query), 0)
+            for term in self.PreprocessText(query):
+                if term in self.term_to_index:
+                    term_counts[term] += 1
+                    term_idx = self.term_to_index[term]
+                    query_vector[idx, term_idx] = term_counts[term]
 
         return query_vector.tocsr()
 
