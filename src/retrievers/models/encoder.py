@@ -15,6 +15,7 @@ class EncoderLayer(nn.Module):
         self.head_dim = hidden_dim
         self.feed_forward_dim = feed_forward_dim
         self.dropout = dropout
+        self.attention_weights = None
 
         self.q = nn.Linear(self.emb_dim, self.emb_dim)
         self.k = nn.Linear(self.emb_dim, self.emb_dim)
@@ -39,7 +40,10 @@ class EncoderLayer(nn.Module):
         attention_scores = (q @ k.transpose(-2, -1)) / sqrt(self.head_dim)
         attention_scores = attention_scores.masked_fill(attention_mask[:, None, None, :] == 0, float('-inf'))  # Mask padding tokens
         attention_weights = torch.softmax(attention_scores, dim=-1)
-
+        
+        # save attention weights before dropout
+        self.attention_weights = attention_weights
+        
         # Apply attention weights to values
         attended_values = self.dropout_layer(attention_weights) @ v
         attended_values = attended_values.transpose(1, 2).reshape(batch_size, seq_length, embedding_size)
