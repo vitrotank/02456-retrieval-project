@@ -4,6 +4,6 @@ hidden_dim: 32
 n_heads: 4
 n_layers: 6
 feed_forward_dim: 768
-tokenizer_name: 'retrieval_data/tokenizer'
+tokenizer_name: 'bert-base-uncased' # HuggingFace Hub tokenizer, downloaded and cached on first use
 query_encoder_weights_path: null
 document_encoder_weights_path: null

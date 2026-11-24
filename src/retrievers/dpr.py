@@ -1,4 +1,5 @@
 from src.retrievers.models.encoder import TransformerEncoder
+from src.data_utils.dataset import DocumentDataset
 import torch
 from transformers import AutoTokenizer
 
@@ -21,7 +22,27 @@ class DPR:
             attention_mask = tokens['attention_mask'].to(self.device)
             embeddings.append(encoder(input_ids, attention_mask))
         return torch.cat(embeddings, dim=0)
-        
+
+    def BuildIndex(self, documents, batch_size=64):
+        # Call this after training
+        self.documents = DocumentDataset(documents).GetDocuments()
+        texts = [document.GetText() for document in self.documents]
+        # One vector per document, same order as self.documents
+        self.document_embeddings = self.encodetexts(texts, self.document_encoder, max_length=256, batch_size=batch_size)
+
+    @torch.no_grad()
+    def Lookup(self, queries, k, batch_size=256):
+        k = min(k, len(self.documents))
+        results = []
+        # Score queries in chunks so the score matrix stays small
+        for start in range(0, len(queries), batch_size):
+            chunk = queries[start:start + batch_size]
+            query_embeddings = self.encodetexts(chunk, self.query_encoder, max_length=64)
+            scores = query_embeddings @ self.document_embeddings.T
+            top_indices = torch.topk(scores, k, dim=1).indices.tolist()
+            results.extend([[self.documents[i] for i in row] for row in top_indices])
+        return results
+
     def __load_models(self):
         # n_heads, n_layers, emb_in, hidden_dim, feed_forward_dim
         self.query_encoder = TransformerEncoder(

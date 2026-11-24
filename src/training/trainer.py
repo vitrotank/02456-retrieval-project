@@ -79,7 +79,9 @@ class Trainer:
 
                 total_loss += loss.item()*batch_size
                 total_pairs += batch_size
-                if total_pairs == 0:
-                    continue  # Avoid division by zero
-                
+
+            if total_pairs == 0:
+                print(f"Epoch {epoch + 1}: no valid batches (all skipped)")
+                continue  # Avoid division by zero
+
             print(f"Epoch {epoch + 1}: loss={total_loss / total_pairs:.4f}")

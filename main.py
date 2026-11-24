@@ -5,6 +5,10 @@ from src.retrievers.bm25 import BM25
 from src.data_utils.query import Query
 from src.retrievers.utils import retrieveQueryAndGetRelevancies
 from src.evaluation.metrics import Evaluate
+from torch.utils.data import DataLoader
+from src.retrievers.dpr import DPR
+from src.data_utils.dataset import DPRDataset
+from src.training.trainer import Trainer
 
 @hydra.main(config_path='config', config_name='fiqa_experiment.yaml', version_base=None)
 def main(cfg):
@@ -64,11 +68,46 @@ def main(cfg):
     bm25_val_scores = Evaluate(bm25_val_relevancies, val_queries)
     bm25_test_scores = Evaluate(bm25_test_relevancies, test_queries)
 
-    print(f'Train results: {train_scores}')
-    print(f'Val results: {val_scores}')
-    print(f'Test results: {test_scores}')
-    print(f'BM25 Train results: {bm25_train_scores}')
-    print(f'BM25 Val results: {bm25_val_scores}')
-    print(f'BM25 Test results: {bm25_test_scores}')
+    ### Train DPR
+    print("Creating DPR...", flush=True)
+    dpr = DPR(cfg)
+    train_dataset = DPRDataset(corpus.train)
+    train_loader = DataLoader(train_dataset, batch_size=cfg.training.batch_size, shuffle=True)
+    trainer = Trainer()
+    trainer.train(dpr.query_encoder,
+                  dpr.document_encoder,
+                  train_loader,
+                  dpr.tokenizer,
+                  epochs=cfg.training.epochs,
+                  lr=cfg.training.lr)
+    print("DPR trained.", flush=True)
+
+    ### Build DPR index with the trained weights
+    print("Building DPR index...", flush=True)
+    dpr.BuildIndex(corpus.all_documents)
+    print("DPR index built.", flush=True)
+
+    dpr_train_relevancies = retrieveQueryAndGetRelevancies(dpr, train_queries, k=cfg.top_k)
+    dpr_val_relevancies = retrieveQueryAndGetRelevancies(dpr, val_queries, k=cfg.top_k)
+    dpr_test_relevancies = retrieveQueryAndGetRelevancies(dpr, test_queries, k=cfg.top_k)
+
+    dpr_train_scores = Evaluate(dpr_train_relevancies, train_queries)
+    dpr_val_scores = Evaluate(dpr_val_relevancies, val_queries)
+    dpr_test_scores = Evaluate(dpr_test_relevancies, test_queries)
+
+    ### Print all results
+    # Every metric only sees the top-k retrieved documents, so MRR is MRR@k
+    k = cfg.top_k
+    print(f'\nResults with cutoff k={k} (Recall@{k}, Precision@{k}, MRR@{k})')
+    results = {
+        'TF-IDF': (train_scores, val_scores, test_scores),
+        'BM25': (bm25_train_scores, bm25_val_scores, bm25_test_scores),
+        'DPR': (dpr_train_scores, dpr_val_scores, dpr_test_scores),
+    }
+    for method, splits in results.items():
+        for split, scores in zip(['Train', 'Val', 'Test'], splits):
+            print(f'{method:<7}{split:<6} Recall@{k}={scores["recall"]:.4f}  '
+                  f'Precision@{k}={scores["precision"]:.4f}  MRR@{k}={scores["mrr"]:.4f}')
+
 if __name__ == '__main__':
     main()
