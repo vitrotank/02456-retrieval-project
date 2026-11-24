@@ -13,6 +13,7 @@ bm25:
   k1: 1.5
   b: 0.75
 
+# training hyperparameters
 training:
   batch_size: 32
   epochs: 3
@@ -23,3 +24,4 @@ training:
 hydra:
   run:
     dir: "outputs/tf_idf/"  # Separate directory for evaluation outputs
+

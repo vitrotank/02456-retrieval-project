@@ -12,8 +12,15 @@ class EncoderLayer(nn.Module):
         self.emb_dim = emb_dim
         self.hidden_dim = hidden_dim
         self.n_heads = n_heads
-        self.head_dim = hidden_dim
-        self.feed_forward_dim = feed_forward_dim
+
+        # If we want to try other parameters in the testing is better to assure that 
+        # the dimenssions of each head are from the division of the (vector dimension) / (number of heads)
+        # So we it can be tested with different hyperparameters (n_head - emb_dim)
+        # Now changing hidden_dim will not have any effect
+
+        assert emb_dim % n_heads == 0 , f"emb_dim({emb_dim}) must be divisible by n_head({n_heads})"
+        self.head_dim = emb_dim // n_heads
+        self.feed_forward_dim = feed_forward_dim    
         self.dropout = dropout
 
         self.q = nn.Linear(self.emb_dim, self.emb_dim)
@@ -119,4 +126,6 @@ class TransformerEncoder(nn.Module):
         for layer in self.model:
             x = layer(x, attention_mask)
 
-        return self.pool(x, attention_mask)
+        #return self.pool(x, attention_mask)
+        # Normalize the vector so the scale is 1 - this will help in softmax
+        return F.normalize(self.pool(x, attention_mask), dim=-1)

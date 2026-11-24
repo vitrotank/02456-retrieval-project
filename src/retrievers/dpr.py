@@ -34,7 +34,7 @@ class DPR:
     def Lookup(self, queries, k, batch_size=256):
         k = min(k, len(self.documents))
         results = []
-        # Score queries in chunks so the score matrix stays small
+        # Score queries in chunks, so the score matrix stays small for memory perfomance
         for start in range(0, len(queries), batch_size):
             chunk = queries[start:start + batch_size]
             query_embeddings = self.encodetexts(chunk, self.query_encoder, max_length=64)
